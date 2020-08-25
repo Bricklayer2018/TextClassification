@@ -3,3 +3,4 @@
 """
 import fasttext
 print(fasttext.tokenize('湖北省武汉市技术大积分都快来'))
+
