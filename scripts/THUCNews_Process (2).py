@@ -1,6 +1,7 @@
 # —*- coding: utf-8 -*-
 """
 Description: Preprocessing THUCNews corpus, merge all txt files in the same category
+and split data to train, dev and test.
 """
 import os
 import time
@@ -81,9 +82,6 @@ def split_dataset(path,folderNameList,train_percent = 0.85,valid_percent = 0.10,
             datas = fr.readlines()
             random.shuffle(datas)
             lines.extend(datas)
-
-            # for line in fr:
-            #    lines.append(line)
 
         length = len(lines)
         print("******Now processing '{}'******".format(folder))
@@ -172,7 +170,8 @@ if __name__ == '__main__':
     
     print("Start time:{}".format(get_current_time()))
     # folderNameList = merge_all_files(rootpath)
+    folderNameList = ['体育','娱乐','家居','彩票','房产','教育','时尚', '时政', '星座', '游戏', '社会', '科技', '股票', '财经']
     # folderNameList = ['体育','娱乐','家居','彩票','房产','教育']
-    folderNameList = ['时尚','时政','星座','游戏','社会','科技','股票','财经']
+    # folderNameList = ['时尚','时政','星座','游戏','社会','科技','股票','财经']
     split_dataset(rootpath,folderNameList)
     print("Finish time:{}".format(get_current_time()))
