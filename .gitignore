@@ -127,3 +127,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# add 2020.09.01 
+.gitignore
+.idea/
+data/THUCNews/
