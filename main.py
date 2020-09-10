@@ -1,17 +1,18 @@
 # -*- coding:utf-8 -*-
 # from pyhanlp import *
 import argparse
-from utils import read_data
+from utils import read_data,load_word2vec
+from models import CNN
 
 def main():
     # 参数解析
     parser = argparse.ArgumentParser(description="Description：TextCNN classifier",prog="TextCNN")
 
     # path parameter
-    parser.add_argument('--train_data_path',default='./train.txt',help="Training data for training neural networks")
-    parser.add_argument('--valid_data_path',default='./valid.txt',help="Valid data for valid neural networks")
-    parser.add_argument('--test_data_path',default='./test.txt',help="Test data for test neural networks")
-    parser.add_argument('--word2vec_data_path',default='word2vec',help="Test data for test neural networks")
+    parser.add_argument('--train_data_path',default='./data/THUCNews/train.20.seg.txt',help="Training data for training neural networks")
+    parser.add_argument('--valid_data_path',default='./data/THUCNews/valid.20.seg.txt',help="Valid data for valid neural networks")
+    parser.add_argument('--test_data_path',default='./data/THUCNews/test.20.seg.txt',help="Test data for test neural networks")
+    parser.add_argument('--word2vec_data_path',default='./data/word2vec/Wikipedia_zh_中文维基百科/sgns.wiki.bigram.bz2',help="Test data for test neural networks")
 
     # other paramter
     parser.add_argument('--mode',default='train',help="train: train (with test) a model / test: test saved models")
@@ -29,6 +30,9 @@ def main():
     # dataset process
     data = read_data() # 读取预处理后的数据集，返回data字典
 
+    # load pretrian word2vec
+    word2vec = load_word2vec(args.word2vec_data_path)
+    
     data["vocab"] = sorted(list(set([w for sent in data["train_x"] + data["valid_x"] + data["test_x"] for w in sent])))
     data["classes"] = sorted(list(set(data["train_y"]))) # labels
     data["word_to_idx"] = {w: i for i, w in enumerate(data["vocab"])}
@@ -42,7 +46,7 @@ def main():
         "EARLY_STOPPING": args.early_stopping,
         "EPOCH": args.epoch,
         "LEARNING_RATE": args.learning_rate,
-        "MAX_SENT_LEN": max([len(sent) for sent in data["train_x"] + data["dev_x"] + data["test_x"]]),
+        "MAX_SENT_LEN": max([len(sent) for sent in data["train_x"] + data["valid_x"] + data["test_x"]]),
         "BATCH_SIZE": 32,
         "WORD_DIM": 300,
         "VOCAB_SIZE": len(data["vocab"]),
@@ -53,6 +57,9 @@ def main():
         "NORM_LIMIT": 3,
         "GPU": args.gpu
     }
+
+    
+    # 训练数据和模型参数对模型进行初始化
 
 
     print(args)

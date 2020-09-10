@@ -58,7 +58,7 @@ NLPTokenizer = JClass("com.hankcs.hanlp.tokenizer.NLPTokenizer")
 if __name__ == "__main__":
     # pickData = sampleDataset('./THUCNews/train.txt')
     # saveSentence('./THUCNews/train.20.txt',pickData)
-    path1 = './THUCNews/train.20.txt'
-    path2 = './THUCNews/train.20.seg.txt'
+    path1 = './THUCNews/valid.20.txt'
+    path2 = './THUCNews/valid.20.seg.txt'
     cutSentenceAndSave(path1,path2)
     # print(words_seg("这是一个中文分词器",NLPTokenizer))
