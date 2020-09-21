@@ -9,6 +9,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 from torch.autograd import Variable
+import copy,time
 
 def train(data,params):
     # 词向量初始化
@@ -34,22 +35,29 @@ def train(data,params):
     params['WV_MATRIX'] = wv_matrix
 
     if torch.cuda.is_available():
+        print("使用GPU进行训练")
         model = TextCNN(**params).cuda(params['GPU'])
     else:
+        print("使用CPU进行训练")
         model = TextCNN(**params)
 
     parameters = filter(lambda p: p.requires_grad, model.parameters())
     optimizer = optim.Adadelta(parameters,params["LEARNING_RATE"])
     criterion = nn.CrossEntropyLoss() # loss object
 
-    pre_dev_acc = 0
-    max_dev_acc = 0
+    pre_valid_acc = 0
+    max_valid_acc = 0
     max_test_acc = 0
     for epoch in range(params["EPOCH"]):
         # data["train_x"], data["train_y"] = random.shuffle(data["train_x"], data["train_y"])
-
+        count = 0
         # batch (可以使用yield生成器)
         for i in range(0,len(data["train_x"]),params["BATCH_SIZE"]):
+            current_date = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+            count += 1
+            if count % 10 == 0:
+                print("{} epoch = {}, 正在运行第{}个batch, 共有{}个batch".format(current_date,str(epoch+1),str(count),str(int(len(data["train_x"])/params["BATCH_SIZE"])+1)))
+            
             batch_range = min(params["BATCH_SIZE"],len(data["train_x"]) - i)
 
             # trans word to id UNK进行padding至最大长度？？？
@@ -72,41 +80,49 @@ def train(data,params):
             pred = model(batch_x) # 模型预测
             loss = criterion(pred,batch_y)
             loss.backward() # 反向传播求解梯度
-            nn.utils.clip_grad_norm(parameters, max_norm=params["NORM_LIMIT"]) # 梯度裁剪
+            nn.utils.clip_grad_norm_(parameters, max_norm=params["NORM_LIMIT"]) # 梯度裁剪
             optimizer.step() # 更新权重参数
 
         # 每个epoch结束后对模型进行评估
-        dev_acc = test(model,data,params,mode = "dev")
+        valid_acc = test(model,data,params,mode = "valid")
         test_acc = test(model,data,params,mode = "test")
-        print("epoch:{}, dev_acc:{}, test_acc:{}".format(str(e+1),dev_acc,test_acc))
+        print("epoch:{}, valid_acc:{}, test_acc:{}".format(str(epoch+1),valid_acc,test_acc))
 
-        if params["EARLY_STOPPING"] and dev_acc <= pre_dev_acc:
-            print("early stopping by dev_acc!")
+        if params["EARLY_STOPPING"] and valid_acc <= pre_valid_acc:
+            print("early stopping by valid_acc!")
             break
         else:
-            pre_dev_acc = dev_acc
+            pre_valid_acc = valid_acc
 
-        if dev_acc > max_dev_acc:
-            max_dev_acc = dev_acc
+        if valid_acc > max_valid_acc:
+            max_valid_acc = valid_acc
             max_test_acc = test_acc
             best_model = copy.deepcopy(model)
     
     # 训练结束
-    print("max dev acc:{}, test acc:{}".format(max_dev_acc,max_test_acc))
+    print("max valid acc:{}, test acc:{}".format(max_valid_acc,max_test_acc))
     return best_model
 
 def test(model,data,params,mode = "test"):
+    current_date = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+    if mode == "valid":
+        print("\t{} The model is validated on the validation set".format(current_date))
+    elif mode == "test":
+        print("\t{} The model is tested on the test set".format(current_date))
     model.eval() # Sets the module in evaluation mode
     
-    if mode == "dev":
-        x, y = data["dev_x"], data["dev_y"]
+    if mode == "valid":
+        x, y = data["valid_x"], data["valid_y"]
     elif mode == "test":
         x, y = data["test_x"], data["test_y"]    
 
+    # 耗时长，如何优化？ ===> 保存为文件后，直接加载
     x = [[data["word_to_idx"][w] if w in data["vocab"] else params["VOCAB_SIZE"] for w in sent] +
         [params["VOCAB_SIZE"] + 1] * (params["MAX_SENT_LEN"] - len(sent))
         for sent in x]
     
+    print("the length of x is :{}".format(str(len(x))))
+
     if torch.cuda.is_available():
         x = Variable(torch.LongTensor(x)).cuda(params["GPU"])
     else:
@@ -142,10 +158,11 @@ def main():
     parser.add_argument('--model',default='rand',help="available models: rand, static, non-static and multichannel")
     parser.add_argument('--save_model',default=False,action='store_false',help="whether saving model or not")
     parser.add_argument("--early_stopping", default=False, action='store_true', help="whether to apply early stopping")
-    parser.add_argument("--epoch", default=100, type=int, help="number of max epoch")
+    parser.add_argument("--epoch", default=10, type=int, help="number of max epoch")
     parser.add_argument("--learning_rate", default=1.0, type=float, help="learning rate")
+    parser.add_argument('--gpu',default=0, type=int, help="whether using gpu or not") # 分配GPU设备
     parser.add_argument('--version', action='version', version='%(prog)s 1.0')
-    parser.add_argument('--gpu',default=False,action='store_false',help="whether using gpu or not")
+
 
     # 参数解析
     args = parser.parse_args()
@@ -154,9 +171,24 @@ def main():
     data = read_data() # 读取预处理后的数据集，返回data字典
 
     data["vocab"] = sorted(list(set([w for sent in data["train_x"] + data["valid_x"] + data["test_x"] for w in sent])))
+    for word in data["vocab"]:
+        with open("./data/THUCNewsSubset/vocab.txt",'a',encoding='utf-8') as fw:
+            fw.write(word + '\n')
+    
     data["classes"] = sorted(list(set(data["train_y"]))) # labels
+    for label in data["classes"]:
+        with open("./data/THUCNewsSubset/classes.txt",'a',encoding='utf-8') as fw:
+            fw.write(label + '\n')
+    
     data["word_to_idx"] = {w: i for i, w in enumerate(data["vocab"])}
+    for key, value in data["word_to_idx"].items():
+        with open("./data/THUCNewsSubset/word_to_idx.txt",'a',encoding='utf-8') as fw:
+            fw.write(key  + '\t' + str(value) + '\n')    
+    
     data["idx_to_word"] = {i: w for i, w in enumerate(data["vocab"])}
+    for key, value in data["idx_to_word"].items():
+        with open("./data/THUCNewsSubset/idx_to_word.txt",'a',encoding='utf-8') as fw:
+            fw.write(str(key)  + '\t' + value + '\n')  
 
     # model parameter
     params = {

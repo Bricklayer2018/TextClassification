@@ -3,12 +3,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from models import BasicModule as basic
-# import BasicModule as basic
 
 # 卷积神经网络模型搭建，基类的继承
-class TextCNN(basic.BasicModule):
+class CharCNN(basic.BasicModule):
     def __init__(self,**kwargs):
-        super(TextCNN,self).__init__()  # 超函数
+        super(CharCNN,self).__init__()  # 超函数
 
         # 模型参数解析
         self.MODEL = kwargs['MODEL'] # rand, static, non-static or multichannel
@@ -59,7 +58,6 @@ class TextCNN(basic.BasicModule):
         # 线性变换层[300,14]
         self.linear = nn.Linear(sum(self.FILTER_NUM), self.CLASS_SIZE)
  
-        self.softmax = nn.Softmax(self.CLASS_SIZE)
 
     def forward(self,x):
         # Step 1：对输入的训练样本进行embedding操作，转换为[batch_size,max_len,word_dim]
@@ -93,10 +91,7 @@ class TextCNN(basic.BasicModule):
         # Step 8：全连接层
         logits = self.linear(x)
 
-        # Step 9：softmax层输出
-        prob = self.softmax(logits)
-
-        return prob
+        return logits
 
 if __name__ == "__main__":
     # model parameter
@@ -120,4 +115,3 @@ if __name__ == "__main__":
     }
     print("params:",params)
     TextCNN = TextCNN(**params)
-    print(TextCNN)
