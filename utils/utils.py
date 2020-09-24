@@ -24,8 +24,8 @@ def read_id_data():
                 # label 标签
                 y.append(label_id)
         if dataset == 'train':
-            data['train_x'] = x[1:500]
-            data['train_y'] = y[1:500]
+            data['train_x'] = x
+            data['train_y'] = y
         elif dataset == 'test':
             data['test_x'] = x
             data['test_y'] = y
