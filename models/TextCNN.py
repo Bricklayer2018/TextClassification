@@ -29,7 +29,8 @@ class TextCNN(basic.BasicModule):
         assert (len(self.FILTERS) == len(self.FILTER_NUM))
 
         # one for UNK and one for zero padding
-        self.embedding = nn.Embedding(self.VOCAB_SIZE + 2,self.WORD_DIM,padding_idx=self.VOCAB_SIZE + 1)
+        # self.embedding = nn.Embedding(self.VOCAB_SIZE + 2,self.WORD_DIM,padding_idx=self.VOCAB_SIZE + 1)
+        self.embedding = nn.Embedding(self.VOCAB_SIZE,self.WORD_DIM)
 
         if self.MODEL == 'static' or self.MODEL == 'non-static' or self.MODEL == 'multichannel':
             self.embedding.weight.data.copy_(torch.from_numpy(self.WV_MATRIX))
@@ -59,7 +60,7 @@ class TextCNN(basic.BasicModule):
         # 线性变换层[300,14]
         self.linear = nn.Linear(sum(self.FILTER_NUM), self.CLASS_SIZE)
  
-        self.softmax = nn.Softmax(self.CLASS_SIZE)
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self,x):
         # Step 1：对输入的训练样本进行embedding操作，转换为[batch_size,max_len,word_dim]

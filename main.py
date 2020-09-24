@@ -2,7 +2,7 @@
 # from pyhanlp import *
 import argparse
 import random
-from utils import read_data,load_pretrain_word2vec
+from utils import *
 from models import TextCNN
 import numpy as np
 import torch
@@ -13,24 +13,28 @@ import copy,time
 
 def train(data,params):
     # 词向量初始化
-    wv_matrix = []
-    if params['MODEL'] != 'rand':
-        # load pretrian word2vec
-        word2vec_dict = load_pretrain_word2vec(args.word2vec_data_path)
-        # 语料中的词分配词向量，由于已经做了word_to_idx和idx_to_word，逐个遍历即可
-        # wv_matrix的索引也可以通过idx_to_word进行索引
-        for i in range(len(data['vocab'])):
-            word = data['idx_to_word'][i]
-            if word in word2vec_dict:
-                wv_matrix.append(word2vec_dict[word])
-            else:
-                wv_matrix.append(np.random.uniform(-0.01,0.01,300).astype(np.float32))
-    else:
-        wv_matrix.append(np.random.uniform(-0.01,0.01,size = (len(data['vocab']),300)))
+    # if params['MODEL'] != 'rand':
+    #     # load pretrian word2vec
+    #     # word2vec_dict = load_pretrain_word2vec(args.word2vec_data_path)
+    #     # 语料中的词分配词向量，由于已经做了word_to_idx和idx_to_word，逐个遍历即可
+    #     # wv_matrix的索引也可以通过idx_to_word进行索引
+    #     for i in range(len(data['vocab'])):
+    #         word = data['idx_to_word'][i]
+    #         if word in word2vec_dict:
+    #             wv_matrix.append(word2vec_dict[word])
+    #         else:
+    #             wv_matrix.append(np.random.uniform(-0.01,0.01,300).astype(np.float32))
+    # else:
+    #     wv_matrix.append(np.random.uniform(-0.01,0.01,size = (len(data['vocab']),300)))
     
-    # one for UNK and one for zero padding
-    wv_matrix.append(np.random.uniform(-0.01, 0.01, 300).astype(np.float32))
-    wv_matrix.append(np.zeros(params['WORD_DIM']).astype(np.float32))
+    # # one for UNK and one for zero padding
+    # wv_matrix.append(np.random.uniform(-0.01, 0.01, 300).astype(np.float32))
+    # wv_matrix.append(np.zeros(params['WORD_DIM']).astype(np.float32))
+    if params['MODEL'] != 'rand':
+        wv_matrix = load_npy_vector(params['PRETRAIN_W2V_PATH'])
+    else:
+        # TODO 随机初始化词向量
+        pass
 
     params['WV_MATRIX'] = wv_matrix
 
@@ -60,20 +64,22 @@ def train(data,params):
             
             batch_range = min(params["BATCH_SIZE"],len(data["train_x"]) - i)
 
-            # trans word to id UNK进行padding至最大长度？？？
-            batch_x = [[data["word_to_idx"][w] for w in sent] + \
-                      [params["VOCAB_SIZE"] + 1]*(params["MAX_SENT_LEN"] - len(sent)) \
-                      for sent in data["train_x"][i:i+batch_range]]
+            batch_x,batch_y = [],[]
+            for sent in data["train_x"][i:i+batch_range]:
+                if len(sent) < params["MAX_SENT_LEN"]:
+                    sent += (params["MAX_SENT_LEN"] - len(sent))*[data["word_to_id"]['PAD']]
+                else:
+                    sent = sent[:params["MAX_SENT_LEN"]]
+                batch_x.append(sent)
 
-            # trans class to id
-            batch_y = [data["classes"].index(c) for c in data["train_y"][i:i + batch_range]]
+            batch_y = data["train_y"][i:i + batch_range]
 
             if torch.cuda.is_available():
-                batch_x = Variable(torch.LongTensor(batch_x)).cuda(params["GPU"])
-                batch_y = Variable(torch.LongTensor(batch_y)).cuda(params["GPU"])
+                batch_x = torch.LongTensor(batch_x).cuda(params["GPU"])
+                batch_y = torch.LongTensor(batch_y).cuda(params["GPU"])
             else:
-                batch_x = Variable(torch.LongTensor(batch_x))
-                batch_y = Variable(torch.LongTensor(batch_y))
+                batch_x = torch.LongTensor(batch_x)
+                batch_y = torch.LongTensor(batch_y)
             
             optimizer.zero_grad() # 梯度清零
             model.train() # Sets the module in training mode
@@ -116,26 +122,28 @@ def test(model,data,params,mode = "test"):
     elif mode == "test":
         x, y = data["test_x"], data["test_y"]    
 
-    # 耗时长，如何优化？ ===> 保存为文件后，直接加载
-    x = [[data["word_to_idx"][w] if w in data["vocab"] else params["VOCAB_SIZE"] for w in sent] +
-        [params["VOCAB_SIZE"] + 1] * (params["MAX_SENT_LEN"] - len(sent))
-        for sent in x]
-    
-    print("the length of x is :{}".format(str(len(x))))
+    batch_x,batch_y = [],[]
+    for sent in x:
+        if len(sent) < params["MAX_SENT_LEN"]:
+            sent += (params["MAX_SENT_LEN"] - len(sent))*[data["word_to_id"]['PAD']]
+        else:
+            sent = sent[:params["MAX_SENT_LEN"]]
+        batch_x.append(sent)
+    batch_y = y
+
+    print("the length of batch_x is :{}".format(str(len(batch_x))))
 
     if torch.cuda.is_available():
-        x = Variable(torch.LongTensor(x)).cuda(params["GPU"])
+        batch_x = torch.LongTensor(batch_x).cuda(params["GPU"])
     else:
-        x = Variable(torch.LongTensor(x))
+        batch_x = torch.LongTensor(batch_x)
 
-    y = [data["classes"].index(c) for c in y]
-
-    model_pred = model(x).cpu().data.numpy() # logits转换成numpy数组
+    model_pred = model(batch_x).cpu().data.numpy() # logits转换成numpy数组
     pred = np.argmax(model_pred, axis = 1)
 
     # acc = sum([1 if p == y else 0 for p, y in zip(pred, y)]) / len(pred)
     score = 0
-    for p,y in zip(pred,y):
+    for p,y in zip(pred,batch_y):
         if p == y:
             score += 1
         else:
@@ -151,11 +159,11 @@ def main():
     parser.add_argument('--train_data_path',default='./data/THUCNews/ModelTestData/train.seg.txt',help="Training data for training neural networks")
     parser.add_argument('--valid_data_path',default='./data/THUCNews/ModelTestData/valid.seg.txt',help="Valid data for valid neural networks")
     parser.add_argument('--test_data_path',default='./data/THUCNews/ModelTestData/test.seg.txt',help="Test data for test neural networks")
-    parser.add_argument('--word2vec_data_path',default='./data/word2vec/Wikipedia_zh_中文维基百科/sgns.wiki.bigram.bz2',help="Test data for test neural networks")
+    parser.add_argument('--word2vec_data_path',default='./data/THUCNewsSubset/vectors.npy',help="Test data for test neural networks")
 
     # other paramter
     parser.add_argument('--mode',default='train',help="train: train (with test) a model / test: test saved models")
-    parser.add_argument('--model',default='rand',help="available models: rand, static, non-static and multichannel")
+    parser.add_argument('--model',default='static',help="available models: rand, static, non-static and multichannel")
     parser.add_argument('--save_model',default=False,action='store_false',help="whether saving model or not")
     parser.add_argument("--early_stopping", default=False, action='store_true', help="whether to apply early stopping")
     parser.add_argument("--epoch", default=10, type=int, help="number of max epoch")
@@ -167,41 +175,59 @@ def main():
     # 参数解析
     args = parser.parse_args()
 
-    # dataset process
-    data = read_data() # 读取预处理后的数据集，返回data字典
+    # # 加载预训练词典，保存为vocab.txt，word_to_id.txt,id_to_word.txt,vectors.npy
+    # word2vec_dict,words_list,vectors_array = load_pretrain_word2vec(args.word2vec_data_path)
 
-    data["vocab"] = sorted(list(set([w for sent in data["train_x"] + data["valid_x"] + data["test_x"] for w in sent])))
-    for word in data["vocab"]:
-        with open("./data/THUCNewsSubset/vocab.txt",'a',encoding='utf-8') as fw:
-            fw.write(word + '\n')
+    # vocab = words_list
+    # word_to_id = {w: i for i, w in enumerate(words_list)}
+    # id_to_word = {i: w for i, w in enumerate(words_list)}
+
+    # # Step 1：保存vocab.txt
+    # with open("./data/THUCNewsSubset/vocab.txt",'w',encoding='utf-8') as fw:
+    #     fw.write('\n'.join(words_list))
+
+    # # Step 2：保存vectors.npy
+    # np.save('./data/THUCNewsSubset/vectors.npy',vectors_array)
+
+    # # Step 3：保存word_to_id.txt, id_to_word.txt
+    # for item in sorted(word_to_id.items(),key=lambda x: x[1],reverse=False): # 升序
+    #     word,idx = item
+    #     with open("./data/THUCNewsSubset/word_to_id.txt",'a',encoding='utf-8') as fw:
+    #         fw.write(word  + '\t' + str(idx) + '\n')
+
+    # for item in sorted(id_to_word.items(),key=lambda x: x[0],reverse=False): # 升序
+    #     idx,word = item
+    #     with open("./data/THUCNewsSubset/id_to_word.txt",'a',encoding='utf-8') as fw:
+    #         fw.write(str(idx)  + '\t' + word + '\n')
+ 
+    ## dataset process
+    # data = read_data() # 读取预处理后的数据集，返回data字典
     
-    data["classes"] = sorted(list(set(data["train_y"]))) # labels
-    for label in data["classes"]:
-        with open("./data/THUCNewsSubset/classes.txt",'a',encoding='utf-8') as fw:
-            fw.write(label + '\n')
-    
-    data["word_to_idx"] = {w: i for i, w in enumerate(data["vocab"])}
-    for key, value in data["word_to_idx"].items():
-        with open("./data/THUCNewsSubset/word_to_idx.txt",'a',encoding='utf-8') as fw:
-            fw.write(key  + '\t' + str(value) + '\n')    
-    
-    data["idx_to_word"] = {i: w for i, w in enumerate(data["vocab"])}
-    for key, value in data["idx_to_word"].items():
-        with open("./data/THUCNewsSubset/idx_to_word.txt",'a',encoding='utf-8') as fw:
-            fw.write(str(key)  + '\t' + value + '\n')  
+    # data["label"] = sorted(list(set(data["train_y"]))) # labels
+    # class_to_id = {w: i for i, w in enumerate(data["class"])}
+    # for item in sorted(class_to_id.items(),key=lambda x: x[1],reverse=False):
+    #     label,idx = item
+    #     with open("./data/THUCNewsSubset/class.txt",'a',encoding='utf-8') as fw:
+    #         fw.write(label + '\t' + str(idx) + '\n')
+
+    data = read_id_data()
+    data["vocab"] = load_vocab("./data/THUCNewsSubset/vocab.txt")
+    data["label"], _ , label_to_id = load_label("./data/THUCNewsSubset/label.txt")
+    data["word_to_id"] = load_word_to_id("./data/THUCNewsSubset/word_to_id.txt")
 
     # model parameter
     params = {
+        "PRETRAIN_W2V_PATH":args.word2vec_data_path,
         "MODEL": args.model,
         "SAVE_MODEL": args.save_model,
         "EARLY_STOPPING": args.early_stopping,
         "EPOCH": args.epoch,
         "LEARNING_RATE": args.learning_rate,
-        "MAX_SENT_LEN": max([len(sent) for sent in data["train_x"] + data["valid_x"] + data["test_x"]]),
+        "MAX_SENT_LEN": 150,
         "BATCH_SIZE": 32,
         "WORD_DIM": 300,
         "VOCAB_SIZE": len(data["vocab"]),
-        "CLASS_SIZE": len(data["classes"]),
+        "CLASS_SIZE": len(data["label"]),
         "FILTERS": [3, 4, 5],
         "FILTER_NUM": [100, 100, 100],
         "DROPOUT_PROB": 0.5,
@@ -216,4 +242,6 @@ def main():
         pass
 
 if __name__ == '__main__':
+    print('Start.')
     main()
+    print('Done.')
