@@ -57,10 +57,10 @@ def train(data,params):
         count = 0
         # batch (可以使用yield生成器)
         for i in range(0,len(data["train_x"]),params["BATCH_SIZE"]):
-            current_date = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
-            count += 1
-            if count % 10 == 0:
-                print("{} epoch = {}, 正在运行第{}个batch, 共有{}个batch".format(current_date,str(epoch+1),str(count),str(int(len(data["train_x"])/params["BATCH_SIZE"])+1)))
+            # current_date = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+            # count += 1
+            # if count % 10 == 0:
+            #     print("{} epoch = {}, 正在运行第{}个batch, 共有{}个batch".format(current_date,str(epoch+1),str(count),str(int(len(data["train_x"])/params["BATCH_SIZE"])+1)))
             
             batch_range = min(params["BATCH_SIZE"],len(data["train_x"]) - i)
 
@@ -92,7 +92,8 @@ def train(data,params):
         # 每个epoch结束后对模型进行评估
         valid_acc = test(model,data,params,mode = "valid")
         test_acc = test(model,data,params,mode = "test")
-        print("epoch:{}, valid_acc:{}, test_acc:{}".format(str(epoch+1),valid_acc,test_acc))
+        current_date = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+        print("{} epoch:{}, valid_acc:{}, test_acc:{}".format(current_date,str(epoch+1),valid_acc,test_acc))
 
         if params["EARLY_STOPPING"] and valid_acc <= pre_valid_acc:
             print("early stopping by valid_acc!")
@@ -110,11 +111,11 @@ def train(data,params):
     return best_model
 
 def test(model,data,params,mode = "test"):
-    current_date = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
-    if mode == "valid":
-        print("\t{} The model is validated on the validation set".format(current_date))
-    elif mode == "test":
-        print("\t{} The model is tested on the test set".format(current_date))
+    # current_date = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+    # if mode == "valid":
+    #     print("{} The model is validated on the validation set".format(current_date))
+    # elif mode == "test":
+    #     print("{} The model is tested on the test set".format(current_date))
     model.eval() # Sets the module in evaluation mode
     
     if mode == "valid":
@@ -131,7 +132,7 @@ def test(model,data,params,mode = "test"):
         batch_x.append(sent)
     batch_y = y
 
-    print("the length of batch_x is :{}".format(str(len(batch_x))))
+    # print("the length of batch_x is :{}".format(str(len(batch_x))))
 
     if torch.cuda.is_available():
         batch_x = torch.LongTensor(batch_x).cuda(params["GPU"])
@@ -166,7 +167,7 @@ def main():
     parser.add_argument('--model',default='static',help="available models: rand, static, non-static and multichannel")
     parser.add_argument('--save_model',default=False,action='store_false',help="whether saving model or not")
     parser.add_argument("--early_stopping", default=False, action='store_true', help="whether to apply early stopping")
-    parser.add_argument("--epoch", default=10, type=int, help="number of max epoch")
+    parser.add_argument("--epoch", default=100, type=int, help="number of max epoch")
     parser.add_argument("--learning_rate", default=1.0, type=float, help="learning rate")
     parser.add_argument('--gpu',default=0, type=int, help="whether using gpu or not") # 分配GPU设备
     parser.add_argument('--version', action='version', version='%(prog)s 1.0')
@@ -202,13 +203,6 @@ def main():
  
     ## dataset process
     # data = read_data() # 读取预处理后的数据集，返回data字典
-    
-    # data["label"] = sorted(list(set(data["train_y"]))) # labels
-    # class_to_id = {w: i for i, w in enumerate(data["class"])}
-    # for item in sorted(class_to_id.items(),key=lambda x: x[1],reverse=False):
-    #     label,idx = item
-    #     with open("./data/THUCNewsSubset/class.txt",'a',encoding='utf-8') as fw:
-    #         fw.write(label + '\t' + str(idx) + '\n')
 
     data = read_id_data()
     data["vocab"] = load_vocab("./data/THUCNewsSubset/vocab.txt")
